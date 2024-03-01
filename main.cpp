@@ -7,13 +7,13 @@
 #include <string>
 #include <iostream>
 
-
 /*
 digit = ('0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9')
 letter = ('a'..'z'|'A'..'Z'|'_')
 
 number ::= digit+ ('.' digit+)? ('e' ('+'|'-')? digit+)?
-identifier ::= letter+ (digit|letter)*
+name ::= letter+ (digit|letter)*
+identifier ::= name ('(' (expr (',' expr)*)? ')')?
 primary ::= number|identifier|('(' expr ')')
 factor ::= primary ('^' primary)?
 term ::= factor (('*'|'/'|'%') factor)*
@@ -21,7 +21,9 @@ expr ::= ('+'|'-')? term (('+'|'-') term)*
 */
 
 using value_t = double;
-std::map<std::string, value_t> env;
+
+std::map<std::string, value_t> constants;
+std::map<std::string, value_t> variables;
 
 
 void trace(std::string msg, char token) {
@@ -34,11 +36,18 @@ class input_t {
         input_t(std::istream& input) : input_(input){
             advance();
         }
+        bool eof() {
+            return input_.eof();
+        }
         char next() {
             return next_;
         }
         void advance(){
             next_ = input_.get();
+        }
+        void skip() {
+            while (!eof() && isblank(next()))
+                advance();
         }
     private:
         std::istream& input_;
@@ -53,15 +62,19 @@ value_t parse_number(input_t& input) {
     bool negexp = false;
 
     char chr = input.next();
-    while (isdigit(chr)) {
+    if (input.eof() || !isdigit(chr))
+        throw std::invalid_argument("number: expected digit, got "+chr);
+    while (!input.eof() && isdigit(chr)) {
         result = result*10 + static_cast<int>(chr-'0');
         input.advance();
         chr = input.next();
     }
-    if (chr == '.') {
+    if (!input.eof() && (chr == '.')) {
         input.advance();
         chr = input.next();
-        while (isdigit(chr)) {
+        if (input.eof() || !isdigit(chr))
+            throw std::invalid_argument("number: expected digit after decimal point, got "+chr);
+        while (!input.eof() && isdigit(chr)) {
             result = result*10 + static_cast<int>(chr-'0');
             exp--;
             input.advance();
@@ -70,7 +83,7 @@ value_t parse_number(input_t& input) {
         result *= pow(10,exp);
         exp = 0;
     }
-    if (chr == 'e') {
+    if (!input.eof() && (chr == 'e')) {
         input.advance();
         chr = input.next();
         if (chr == '+') {
@@ -78,9 +91,10 @@ value_t parse_number(input_t& input) {
         } else if (chr == '-') {
             negexp = true;
             input.advance();
-        }
+        } else if (input.eof() || !isdigit(chr))
+            throw std::invalid_argument("number: expected sign or digit after exponent indicator, got "+chr);
         chr = input.next();
-        while (isdigit(chr)) {
+        while (!input.eof() && isdigit(chr)) {
             exp = exp*10 + static_cast<int>(chr-'0');
             input.advance();
             chr = input.next();
@@ -89,66 +103,82 @@ value_t parse_number(input_t& input) {
             exp = -exp;
         result *= pow(10, exp);
     }
+    input.skip();
     return result;
 }
 value_t parse_identifier(input_t& input) {
     std::string name;
 
     char chr = input.next();
-    if (!isalpha(chr))
-        throw std::invalid_argument("parse error: identifier: expected alpha, got "+chr);
-    while (isalnum(chr) || (chr == '_')) {
+    if (input.eof() || !isalpha(chr))
+        throw std::invalid_argument("identifier: expected alpha, got "+chr);
+    while (!input.eof() && (isalnum(chr) || (chr == '_'))) {
         name.push_back(chr);
         input.advance();
         chr = input.next();
     }
 
-    decltype(env)::iterator ident = env.find(name);
-    if (ident == env.end())
-        throw std::invalid_argument("execution error: unknown identifier: "+name);
-    
-    return ident->second;
+    if (!input.eof() && (chr == '(')) {
+        throw std::runtime_error("function calls are not yet implemented");
+    } else {
+        decltype(constants)::iterator constant = constants.find(name);
+        if (constant != constants.end())
+            return constant->second;
+        decltype(variables)::iterator variable = variables.find(name);
+        if (variable != variables.end()) 
+            return variable->second;
+        throw std::runtime_error("undefined identifier: "+name);
+    }
+    input.skip();
 }
 value_t parse_primary(input_t& input) {
-    value_t result;
+    value_t result = 0;
     char chr = input.next();
-    if (isdigit(chr)) {
+    if (input.eof()) {
+        throw std::invalid_argument("primary: input is empty");
+    } else if (isdigit(chr)) {
         result = parse_number(input);
     } else if (isalpha(chr)) {
         result = parse_identifier(input);
     }  else if (chr == '(') {
-        input.advance();
+        input.advance(); 
         result = parse_expr(input);
+        input.skip();
         chr = input.next();
-        if (chr != ')')
-            throw std::invalid_argument("parse error: primary: expected ')', got "+chr);
+        if (input.eof() || (chr != ')'))
+            throw std::invalid_argument("primary: expected ')', got "+chr);
         input.advance();
+        input.skip();
+    } else {
+        throw std::invalid_argument("primary: expected number, identifier or (expression)");
     }
     return result;
 }
 value_t parse_factor(input_t& input) {
     value_t result = parse_primary(input);
-
     char chr = input.next();
-    if (chr == '^') {
+    if (!input.eof() && (chr == '^')) {
         input.advance();
+        input.skip();
         result = pow(result, parse_primary(input)); 
     }
     return result;
 }
 value_t parse_term(input_t& input) {
     value_t result = parse_factor(input);
-
     char chr = input.next();
-    while ((chr == '*') || (chr == '/') || (chr == '%')) {
+    while (!input.eof() && ((chr == '*') || (chr == '/') || (chr == '%'))) {
         if (chr == '*') {
             input.advance();
+            input.skip();
             result *= parse_factor(input);
         } else if (chr == '/') {
             input.advance();
+            input.skip();
             result /= parse_factor(input);
         } else if (chr == '%') {
             input.advance();
+            input.skip();
             result  = fmod(result, parse_factor(input));
         }
         chr = input.next();
@@ -158,12 +188,17 @@ value_t parse_term(input_t& input) {
 value_t parse_expr(input_t& input) {
     bool negate = false;
 
+    input.skip();
     char chr = input.next();
-    if (chr == '+') {
+    if (input.eof()) {
+        throw std::invalid_argument("expr: input is empty");
+    } else if (chr == '+') {
         input.advance();
+        input.skip();
     } else if (chr == '-') {
         negate = true;
         input.advance();
+        input.skip();
     }
 
     value_t result = parse_term(input);
@@ -171,12 +206,14 @@ value_t parse_expr(input_t& input) {
         result = -result;
     
     chr = input.next();
-    while ((chr == '+') || (chr == '-')) {
+    while (!input.eof() && ((chr == '+') || (chr == '-'))) {
         if (chr == '+') {
             input.advance();
+            input.skip();
             result += parse_term(input);
         } else if (chr == '-') {
             input.advance();
+            input.skip();
             result -= parse_term(input);
         }
         chr = input.next();
@@ -185,11 +222,10 @@ value_t parse_expr(input_t& input) {
     return result;
 }
 
-
 void setup() {
-    env["pi"] = 3.1415926535898;
+    constants["pi"] = 3.1415926535898;
+    constants["e"]  = 2.7182818284590;
 }
-
 int main(int argc, char*argv[]) {
     setup();
     while (true) {
@@ -199,7 +235,9 @@ int main(int argc, char*argv[]) {
             value_t result = parse_expr(input);
             std::cout << "= " << result << std::endl;
         } catch (const std::invalid_argument& error) {
-            std::cout << error.what() << std::endl;
+            std::cout << "parse error: " << error.what() << std::endl;
+        } catch (const std::runtime_error& error) {
+            std::cout << "execution error: " << error.what() << std::endl;
         }
     }
 }
