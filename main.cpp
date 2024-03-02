@@ -2,9 +2,11 @@
 #include <cstdint>
 #include <cmath>
 #include <cctype>
+#include <functional>
 #include <stdexcept>
 #include <map>
 #include <string>
+#include <vector>
 #include <iostream>
 
 /*
@@ -21,15 +23,11 @@ expr ::= ('+'|'-')? term (('+'|'-') term)*
 */
 
 using value_t = double;
+using function_t = std::function<value_t(const std::vector<value_t>&)>;
 
 std::map<std::string, value_t> constants;
 std::map<std::string, value_t> variables;
-
-
-void trace(std::string msg, char token) {
-    std::cout << "trace: " << msg << " (" << token << ")" << std::endl;
-}
-
+std::map<std::string, function_t> functions;
 
 class input_t {
     public:
@@ -119,7 +117,27 @@ value_t parse_identifier(input_t& input) {
     }
 
     if (!input.eof() && (chr == '(')) {
-        throw std::runtime_error("function calls are not yet implemented");
+        std::vector<value_t> args;
+        input.advance();
+        chr = input.next();
+        if (!input.eof() && (chr != ')')) {
+            args.push_back(parse_expr(input));
+            chr = input.next();
+            while (!input.eof() && (chr == ',')) {
+                input.advance();
+                input.skip();
+                args.push_back(parse_expr(input));
+                chr = input.next();
+            }
+        }
+        if (!input.eof() && (chr != ')')) 
+            throw std::invalid_argument("call: expected ), got "+chr);
+        input.advance();
+
+        decltype(functions)::iterator function = functions.find(name);
+        if (function != functions.end())
+            return function->second(args);
+        throw std::runtime_error("identifier: undefined function: "+name);
     } else {
         decltype(constants)::iterator constant = constants.find(name);
         if (constant != constants.end())
@@ -127,7 +145,7 @@ value_t parse_identifier(input_t& input) {
         decltype(variables)::iterator variable = variables.find(name);
         if (variable != variables.end()) 
             return variable->second;
-        throw std::runtime_error("undefined identifier: "+name);
+        throw std::runtime_error("identifier: undefined identifier: "+name);
     }
     input.skip();
 }
@@ -225,6 +243,41 @@ value_t parse_expr(input_t& input) {
 void setup() {
     constants["pi"] = 3.1415926535898;
     constants["e"]  = 2.7182818284590;
+    functions["abs"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1)
+            throw std::runtime_error("abs: wrong number of arguments"); 
+        return abs(args[0]); 
+    };
+    functions["sqrt"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1)
+            throw std::runtime_error("sqrt: wrong number of arguments"); 
+        return sqrt(args[0]); 
+    };
+    functions["exp"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1)
+            throw std::runtime_error("exp: wrong number of arguments"); 
+        return exp(args[0]); 
+    };
+    functions["log"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1)
+            throw std::runtime_error("log: wrong number of arguments"); 
+        return log(args[0]); 
+    };
+    functions["sin"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1)
+            throw std::runtime_error("sin: wrong number of arguments"); 
+        return sin(args[0]); 
+    };
+    functions["cos"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1) 
+            throw std::runtime_error("cos: wrong number of arguments"); 
+        return cos(args[0]); 
+    };
+    functions["tan"] = [](std::vector<value_t> args)->value_t { 
+        if (args.size()!=1) 
+            throw std::runtime_error("tan: wrong number of arguments"); 
+        return tan(args[0]); 
+    };
 }
 int main(int argc, char*argv[]) {
     setup();
