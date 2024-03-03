@@ -2,7 +2,7 @@
 
 This simple calculator works on floating point numbers written with an optional exponent part (**e**). It supports basic operators: **`+`**, **`-`**, **`*`**, **`/`**, **`^`** (power), **`%`** (modulo), **unary `-`**. Sub-expression can be computed using **parenthesis**. 
 
-Mathematical constants **`pi`** and **`e`** are defined as well as a number of basic functions (**`abs`**, **`pow`**, **`sqrt`**, **`exp`**, **`log`** with optional base, **`sin`**, **`cos`**, **`tan`**).
+Mathematical constants **`pi`** and **`e`** are defined, as well as special values **`nan`** and **`inf`**, and a number of basic functions (**`abs`**, **`pow`**, **`sqrt`**, **`exp`**, **`log`** with optional base, **`sin`**, **`cos`**, **`tan`**).
 
 The result of computing an expression can be assigned to a variable using **`>`**. A variable name starts with a letter, and is composed of letters, digit, and undescore **`_`**. Any name can be used as long as it is not the name of a predefined constant or function. 
 

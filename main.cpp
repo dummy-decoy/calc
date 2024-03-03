@@ -273,6 +273,8 @@ value_t parse_statement(input_t& input) {
 void setup() {
     constants["pi"] = 3.1415926535898;
     constants["e"]  = 2.7182818284590;
+    constants["nan"] = NAN;
+    constants["inf"] = INFINITY;
     functions["abs"] = [](std::vector<value_t> args)->value_t { 
         if (args.size()!=1)
             throw std::runtime_error("abs: wrong number of arguments"); 
