@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <limits>
 
 /*
 digit = ('0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9')
@@ -20,6 +21,7 @@ primary ::= number|identifier|('(' expr ')')
 factor ::= primary ('^' primary)?
 term ::= factor (('*'|'/'|'%') factor)*
 expr ::= ('+'|'-')? term (('+'|'-') term)*
+statement ::= expr ('>'  name)
 */
 
 using value_t = double;
@@ -45,6 +47,10 @@ class input_t {
         }
         void skip() {
             while (!eof() && isblank(next()))
+                advance();
+        }
+        void ignore() {
+            while (!eof() && (next() != '\n'))
                 advance();
         }
     private:
@@ -104,21 +110,28 @@ value_t parse_number(input_t& input) {
     input.skip();
     return result;
 }
-value_t parse_identifier(input_t& input) {
+std::string parse_name(input_t& input) {
     std::string name;
 
     char chr = input.next();
     if (input.eof() || !isalpha(chr))
-        throw std::invalid_argument("identifier: expected alpha, got "+chr);
+        throw std::invalid_argument("name: expected alpha, got "+chr);
     while (!input.eof() && (isalnum(chr) || (chr == '_'))) {
         name.push_back(chr);
         input.advance();
         chr = input.next();
     }
+    input.skip();
+    return name;
+}
+value_t parse_identifier(input_t& input) {
+    std::string name = parse_name(input);
 
+    char chr = input.next();
     if (!input.eof() && (chr == '(')) {
         std::vector<value_t> args;
         input.advance();
+        input.skip();
         chr = input.next();
         if (!input.eof() && (chr != ')')) {
             args.push_back(parse_expr(input));
@@ -133,6 +146,7 @@ value_t parse_identifier(input_t& input) {
         if (!input.eof() && (chr != ')')) 
             throw std::invalid_argument("call: expected ), got "+chr);
         input.advance();
+        input.skip();
 
         decltype(functions)::iterator function = functions.find(name);
         if (function != functions.end())
@@ -206,7 +220,6 @@ value_t parse_term(input_t& input) {
 value_t parse_expr(input_t& input) {
     bool negate = false;
 
-    input.skip();
     char chr = input.next();
     if (input.eof()) {
         throw std::invalid_argument("expr: input is empty");
@@ -237,6 +250,23 @@ value_t parse_expr(input_t& input) {
         chr = input.next();
     }
 
+    return result;
+}
+value_t parse_statement(input_t& input) {
+    input.skip();
+    value_t result = parse_expr(input);
+    char chr = input.next();
+    if (!input.eof() && (chr == '>')) {
+        input.advance();
+        input.skip();
+        
+        std::string name = parse_name(input);
+        if (constants.find(name) != constants.end())
+            throw std::invalid_argument("statement: cannot assign value to constant");
+        if (functions.find(name) != functions.end())
+            throw std::invalid_argument("statement: cannot assign value to function");
+        variables[name] = result;   
+    }
     return result;
 }
 
@@ -291,14 +321,18 @@ int main(int argc, char*argv[]) {
     setup();
     while (true) {
         std::cout << "? " << std::flush;
-        try {
-            input_t input(std::cin);
-            value_t result = parse_expr(input);
-            std::cout << "= " << result << std::endl;
-        } catch (const std::invalid_argument& error) {
-            std::cout << "parse error: " << error.what() << std::endl;
-        } catch (const std::runtime_error& error) {
-            std::cout << "execution error: " << error.what() << std::endl;
+        input_t input(std::cin);
+        while (input.next() != '\n') {
+            try {
+                value_t result = parse_statement(input);
+                std::cout << "= " << result << std::endl;
+            } catch (const std::invalid_argument& error) {
+                std::cout << "parse error: " << error.what() << std::endl;
+                input.ignore();
+            } catch (const std::runtime_error& error) {
+                std::cout << "execution error: " << error.what() << std::endl;
+                input.ignore();
+            }
         }
     }
 }
